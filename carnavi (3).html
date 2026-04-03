@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CarNavi</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #060d1a; font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif; }
+    input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const STORAGE_KEY = "car_maintenance_data_v5";
+
+const initialData = {
+  cars: [
+    { id: 1, name: "セレナ", maker: "Nissan", model: "Serena", year: 2020, mileage: 86000, color: "#2563eb", icon: "🚐", oilInterval: 6000, oilType: "0W20", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "" },
+    { id: 2, name: "エブリィワゴン", maker: "Suzuki", model: "Every Wagon", year: 2025, mileage: 0, color: "#16a34a", icon: "🚌", oilInterval: 3000, oilType: "5W30", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "" },
+  ],
+  records: [
+    { id: 1, carId: 1, type: "cvt",     date: "2024-09-01", mileage: 72000, cost: 0, note: "CVTオイル交換" },
+    { id: 2, carId: 1, type: "filter",  date: "2026-01-01", mileage: 84000, cost: 0, note: "ACフィルター交換" },
+    { id: 3, carId: 1, type: "battery", date: "2025-02-01", mileage: 78000, cost: 0, note: "バッテリー交換" },
+    { id: 4, carId: 1, type: "tire",    date: "2025-11-01", mileage: 86000, cost: 0, note: "タイヤ交換" },
+    { id: 5, carId: 1, type: "wiper",   date: "2025-12-01", mileage: 86000, cost: 0, note: "ワイパー交換" },
+    { id: 6, carId: 1, type: "oil",     date: "2025-10-01", oilDate: "2025-10-01", mileage: 84000, cost: 0, note: "エンジンオイル交換 0W20" },
+  ],
+  nextId: 3,
+  nextRecordId: 10,
+  customMaints: [
+    { id: "cm_wash_1", carId: 1, label: "洗車", icon: "🚿", lastDate: null, lastMileage: null, intervalKm: null, intervalMonths: null },
+    { id: "cm_wash_2", carId: 2, label: "洗車", icon: "🚿", lastDate: null, lastMileage: null, intervalKm: null, intervalMonths: null },
+  ],
+};
+
+const MAINTENANCE_TYPES = [
+  { id: "oil",        label: "オイル交換",        icon: "🛢️" },
+  { id: "cvt",        label: "CVTオイル",          icon: "⚙️" },
+  { id: "tire",       label: "タイヤ交換",         icon: "🔄" },
+  { id: "brake",      label: "ブレーキ点検",       icon: "🔧" },
+  { id: "battery",    label: "バッテリー",         icon: "🔋" },
+  { id: "filter",     label: "エアコンフィルター", icon: "💨" },
+  { id: "wiper",      label: "ワイパー",           icon: "🌧️" },
+  { id: "inspection", label: "車検",               icon: "📋" },
+  { id: "wash",       label: "洗車",               icon: "🚿" },
+  { id: "other",      label: "その他",             icon: "🔩" },
+];
+
+const DEFAULT_INTERVALS = {
+  oil: null, cvt: 40000, tire: 40000, brake: 20000,
+  battery: 50000, filter: 15000, wiper: null,
+  inspection: null, wash: null, other: null,
+};
+
+const CAR_ICONS  = ["🚗","🚐","🚌","🚙","🛻","🚕","🏎️","🚓"];
+const CAR_COLORS = ["#2563eb","#16a34a","#dc2626","#9333ea","#ea580c","#0891b2","#be185d","#65a30d"];
+
+function useStorage() {
+  const [data, setData] = useState(initialData);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        const mergedCars = (saved.cars || []).map(c => {
+          const init = initialData.cars.find(ic => ic.id === c.id);
+          return { oilInterval: init?.oilInterval ?? 5000, oilType: init?.oilType ?? "", icon: init?.icon ?? "🚗", color: init?.color ?? "#2563eb", shakenExpiry: init?.shakenExpiry ?? "", jibaishaExpiry: init?.jibaishaExpiry ?? "", firstReg: init?.firstReg ?? "", carType: init?.carType ?? "", chassisNo: init?.chassisNo ?? "", ...c };
+        });
+        setData({ ...initialData, ...saved, cars: mergedCars });
+      }
+    } catch {}
+  }, []);
+  const save = (d) => { setData(d); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
+  return [data, save];
+}
+
+function AIAdvisor({ records, cars, selectedCarId }) {
+  const [response, setResponse] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [question, setQuestion] = useState("");
+  const car = cars.find(c => c.id === selectedCarId) ?? null;
+  const carRecords = records.filter(r => r.carId === selectedCarId);
+
+  const ask = async (q) => {
+    if (!q.trim() || !car) return;
+    setLoading(true); setResponse("");
+    const ctx = `車両: ${car.maker} ${car.model}(${car.year}年式) 走行距離:${car.mileage.toLocaleString()}km オイル周期:${car.oilInterval ?? "不明"}km(${car.oilType ?? ""})\nメンテ履歴: ${carRecords.slice(-12).map(r => `${r.date} ${r.type} ${r.mileage}km`).join(", ") || "なし"}`;
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, system: `あなたは親切な車のメンテナンスアドバイザーです。以下の車両情報を基に簡潔で実用的なアドバイスを日本語200字以内で。\n${ctx}`, messages: [{ role: "user", content: q }] }),
+      });
+      const d = await res.json();
+      setResponse(d.content?.[0]?.text ?? "回答を取得できませんでした。");
+    } catch { setResponse("エラーが発生しました。しばらくしてから再試行してください。"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ background:"#0f172a", border:"1px solid #1e3a5f", borderRadius:16, padding:20 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        <span style={{ fontSize:22 }}>🤖</span>
+        <h3 style={{ margin:0, color:"#38bdf8", fontSize:15 }}>AIメンテナンスアドバイザー</h3>
+      </div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+        {["次のオイル交換はいつ?","今必要なメンテナンスは?","年間の維持費の目安は?"].map(p => (
+          <button key={p} onClick={() => { setQuestion(p); ask(p); }} style={{ background:"#1e3a5f", border:"1px solid #2563eb", color:"#93c5fd", borderRadius:20, padding:"5px 12px", fontSize:11, cursor:"pointer" }}>{p}</button>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:8 }}>
+        <input value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={e => e.key === "Enter" && ask(question)} placeholder="質問を入力..." style={{ flex:1, background:"#1e293b", border:"1px solid #334155", borderRadius:10, padding:"9px 12px", color:"#e2e8f0", fontSize:13, outline:"none" }} />
+        <button onClick={() => ask(question)} disabled={loading} style={{ background:loading?"#1e3a5f":"#2563eb", border:"none", borderRadius:10, padding:"9px 16px", color:"white", cursor:loading?"not-allowed":"pointer", fontSize:13 }}>{loading ? "⏳" : "送信"}</button>
+      </div>
+      {response && <div style={{ marginTop:14, background:"#1e293b", borderRadius:12, padding:14, color:"#e2e8f0", fontSize:13, lineHeight:1.8, borderLeft:"3px solid #2563eb" }}>{response}</div>}
+    </div>
+  );
+}
+
+function CarForm({ car, setCar, onSubmit, onCancel, submitLabel }) {
+  const inp = { background:"#1e293b", border:"1px solid #334155", borderRadius:10, padding:"9px 12px", color:"#e2e8f0", fontSize:13, width:"100%", boxSizing:"border-box", outline:"none" };
+  const lbl = { color:"#64748b", fontSize:11, marginBottom:4, display:"block" };
+  return (
+    <>
+      <div style={{ marginBottom:14 }}>
+        <label style={lbl}>アイコン</label>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {CAR_ICONS.map(ic => <button key={ic} onClick={() => setCar({ ...car, icon:ic })} style={{ fontSize:20, background:car.icon===ic?"#1e3a5f":"transparent", border:car.icon===ic?"2px solid #38bdf8":"2px solid #1e293b", borderRadius:8, padding:"5px 8px", cursor:"pointer" }}>{ic}</button>)}
+        </div>
+      </div>
+      <div style={{ marginBottom:14 }}>
+        <label style={lbl}>カラー</label>
+        <div style={{ display:"flex", gap:8 }}>
+          {CAR_COLORS.map(col => <button key={col} onClick={() => setCar({ ...car, color:col })} style={{ width:26, height:26, background:col, border:car.color===col?"3px solid white":"3px solid transparent", borderRadius:"50%", cursor:"pointer" }} />)}
+        </div>
+      </div>
+      {[["name","ニックネーム *","例: 通勤車",false],["maker","メーカー","例: Nissan",false],["model","モデル","例: Serena",false],["year","年式","2020",true],["mileage","現在の走行距離 (km)","例: 86000",true]].map(([k,l,p,num]) => (
+        <div key={k} style={{ marginBottom:10 }}>
+          <label style={lbl}>{l}</label>
+          <input type={num?"number":"text"} value={car[k] ?? ""} onChange={e => setCar({ ...car, [k]:e.target.value })} placeholder={p} style={inp} />
+        </div>
+      ))}
+      <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+        <div style={{ flex:1 }}><label style={lbl}>オイル交換周期 (km)</label><input type="number" value={car.oilInterval ?? ""} onChange={e => setCar({ ...car, oilInterval:Number(e.target.value)||0 })} placeholder="例: 5000" style={inp} /></div>
+        <div style={{ flex:1 }}><label style={lbl}>オイル種類</label><input type="text" value={car.oilType ?? ""} onChange={e => setCar({ ...car, oilType:e.target.value })} placeholder="例: 0W20" style={inp} /></div>
+      </div>
+      <div style={{ borderTop:"1px solid #1e3a5f", margin:"12px 0", paddingTop:12 }}>
+        <div style={{ ...lbl, marginBottom:10, color:"#38bdf8" }}>車検証情報</div>
+        {[["shakenExpiry","車検有効期限"],["jibaishaExpiry","自賠責保険の期限"],["firstReg","初年度登録年月"]].map(([k,l]) => (
+          <div key={k} style={{ marginBottom:10 }}><label style={lbl}>{l}</label><input type="month" value={(car[k] ?? "").slice(0,7)} onChange={e => setCar({ ...car, [k]: e.target.value })} style={inp} /></div>
+        ))}
+        <div style={{ marginBottom:10 }}><label style={lbl}>型式</label><input type="text" value={car.carType ?? ""} onChange={e => setCar({ ...car, carType:e.target.value })} placeholder="例: C27" style={inp} /></div>
+        <div style={{ marginBottom:10 }}><label style={lbl}>車台番号</label><input type="text" value={car.chassisNo ?? ""} onChange={e => setCar({ ...car, chassisNo:e.target.value })} placeholder="例: C27-000001" style={inp} /></div>
+      </div>
+      <div style={{ display:"flex", gap:10, marginTop:14 }}>
+        <button onClick={onCancel} style={{ flex:1, background:"transparent", border:"1px solid #334155", color:"white", borderRadius:10, padding:"9px", fontSize:13, cursor:"pointer" }}>キャンセル</button>
+        <button onClick={onSubmit} style={{ flex:2, background:"#2563eb", border:"none", color:"white", borderRadius:10, padding:"9px", fontSize:13, cursor:"pointer", fontWeight:500 }}>{submitLabel}</button>
+      </div>
+    </>
+  );
+}
+
+function App() {
+  const [data, save] = useStorage();
+  const [tab, setTab] = useState("home");
+  const [selId, setSelId] = useState(1);
+  const [showRec, setShowRec] = useState(false);
+  const [showMgr, setShowMgr] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showAddMaint, setShowAddMaint] = useState(false);
+  const [editMaint, setEditMaint] = useState(null); // タップで編集するメンテナンス項目
+  const [editCar, setEditCar] = useState(null);
+  const [rec, setRec] = useState({ type:"oil", date:new Date().toISOString().slice(0,10), mileage:"", cost:"", note:"" });
+  const [newCar, setNewCar] = useState({ name:"", maker:"", model:"", year:new Date().getFullYear(), mileage:"", color:"#2563eb", icon:"🚗", oilInterval:5000, oilType:"", shakenExpiry:"", jibaishaExpiry:"", firstReg:"", carType:"", chassisNo:"" });
+  const [newMaint, setNewMaint] = useState({ label:"", icon:"🔩", lastDate:"", lastMileage:"", intervalKm:"", intervalMonths:"" });
+
+  const car  = data.cars.find(c => c.id === selId) ?? data.cars[0] ?? null;
+  const recs = data.records.filter(r => r.carId === (car?.id ?? selId)).sort((a,b) => b.date.localeCompare(a.date));
+  const total = recs.reduce((s,r) => s+(Number(r.cost)||0), 0);
+
+  const getReminders = () => {
+    if (!car) return [];
+    const addOneYear = (d) => { const x=new Date(d); x.setFullYear(x.getFullYear()+1); return `${x.getFullYear()}年${x.getMonth()+1}月`; };
+    const addMonths  = (d,m) => { const x=new Date(d); x.setMonth(x.getMonth()+m); return `${x.getFullYear()}年${x.getMonth()+1}月`; };
+    const isOverdue  = (d,m) => { const x=new Date(d); x.setMonth(x.getMonth()+m); return x<new Date(); };
+    return MAINTENANCE_TYPES.map(m => {
+      if (["filter","wiper"].includes(m.id)) {
+        const last = [...recs].filter(r=>r.type===m.id).sort((a,b)=>b.date.localeCompare(a.date))[0];
+        if (!last) return null;
+        const expiry=new Date(last.date); expiry.setFullYear(expiry.getFullYear()+1);
+        return { ...m, lastDate:last.date, nextDate:addOneYear(last.date), overdue:expiry<new Date(), isDateBased:true, remaining:expiry<new Date()?-1:1 };
+      }
+      if (m.id==="oil") {
+        const lastOil=[...recs].filter(r=>r.type==="oil").sort((a,b)=>b.mileage-a.mileage)[0];
+        if (!lastOil) return null;
+        const lastMileage=lastOil.mileage, lastDate=lastOil.oilDate??lastOil.date;
+        const interval=car.oilInterval>0?car.oilInterval:6000;
+        const nextKm=lastMileage+interval, kmRemain=nextKm-(car.mileage||0);
+        const nextMonth=addMonths(lastDate,6), dateOver=isOverdue(lastDate,6), kmOver=kmRemain<=0;
+        return { ...m, lastDate, lastMileage, nextKm, kmRemain, nextMonth, dateOver, kmOver, overdue:dateOver||kmOver, isOil:true, remaining:dateOver||kmOver?-1:kmRemain };
+      }
+      const interval=DEFAULT_INTERVALS[m.id]??null; if(!interval) return null;
+      const last=[...recs].filter(r=>r.type===m.id).sort((a,b)=>b.mileage-a.mileage)[0];
+      const nextKm=last?last.mileage+interval:(car.mileage||0)+interval;
+      const remaining=nextKm-(car.mileage||0);
+      return { ...m, lastDate:last?.date??null, lastMileageVal:last?.mileage??null, nextKm, remaining, isDateBased:false };
+    }).filter(Boolean).sort((a,b)=>a.remaining-b.remaining);
+  };
+
+  const getCustomReminders = () => {
+    if (!car) return [];
+    const fmt=(d,m)=>{const x=new Date(d);x.setMonth(x.getMonth()+m);return `${x.getFullYear()}年${x.getMonth()+1}月`;};
+    return (data.customMaints??[]).filter(cm=>cm.carId===car.id).map(cm=>{
+      const nextKm=(cm.lastMileage!=null&&cm.intervalKm)?cm.lastMileage+cm.intervalKm:null;
+      const kmOver=nextKm!=null?nextKm-(car.mileage||0)<=0:false;
+      const nextMonth=(cm.lastDate&&cm.intervalMonths)?fmt(cm.lastDate,cm.intervalMonths):null;
+      const dateOver=(cm.lastDate&&cm.intervalMonths)?(()=>{const d=new Date(cm.lastDate);d.setMonth(d.getMonth()+cm.intervalMonths);return d<new Date();})():false;
+      const overdue=kmOver||dateOver;
+      return {...cm,isCustom:true,nextKm,nextMonth,kmOver,dateOver,overdue,remaining:overdue?-1:(nextKm?nextKm-(car.mileage||0):999999)};
+    });
+  };
+
+  const addRecord = () => {
+    if (!rec.mileage||!car) return;
+    if (rec.type==="oil"&&!rec.oilDate) return;
+    const r={...rec,id:data.nextRecordId,carId:car.id,cost:Number(rec.cost)||0,mileage:Number(rec.mileage)};
+    const upd={...data,records:[...data.records,r],nextRecordId:data.nextRecordId+1};
+    if (r.mileage>(car.mileage||0)) upd.cars=data.cars.map(c=>c.id===car.id?{...c,mileage:r.mileage}:c);
+    save(upd); setShowRec(false); setRec({type:"oil",date:new Date().toISOString().slice(0,10),mileage:"",cost:"",note:""});
+  };
+  const addCar = () => {
+    if (!newCar.name.trim()) return;
+    const c={...newCar,id:data.nextId,mileage:Number(newCar.mileage)||0};
+    save({...data,cars:[...data.cars,c],nextId:data.nextId+1}); setSelId(c.id); setShowAdd(false);
+    setNewCar({name:"",maker:"",model:"",year:new Date().getFullYear(),mileage:"",color:"#2563eb",icon:"🚗",oilInterval:5000,oilType:"",shakenExpiry:"",jibaishaExpiry:"",firstReg:"",carType:"",chassisNo:""});
+  };
+  const updateCar = () => {
+    if (!editCar?.name.trim()) return;
+    save({...data,cars:data.cars.map(c=>c.id===editCar.id?{...editCar,mileage:Number(editCar.mileage)||0}:c)}); setEditCar(null);
+  };
+  const deleteCar = (id) => {
+    if (data.cars.length<=1) return;
+    const upd={...data,cars:data.cars.filter(c=>c.id!==id),records:data.records.filter(r=>r.carId!==id)};
+    save(upd); if(selId===id) setSelId(upd.cars[0]?.id??0);
+  };
+  const deleteRecord = (id) => save({...data,records:data.records.filter(r=>r.id!==id)});
+  const addCustomMaint = () => {
+    if (!newMaint.label.trim()) return;
+    const cm={id:`cm_${Date.now()}`,carId:car.id,label:newMaint.label.trim(),icon:newMaint.icon||"🔩",lastDate:newMaint.lastDate||null,lastMileage:newMaint.lastMileage?Number(newMaint.lastMileage):null,intervalKm:newMaint.intervalKm?Number(newMaint.intervalKm):null,intervalMonths:newMaint.intervalMonths?Number(newMaint.intervalMonths):null};
+    save({...data,customMaints:[...(data.customMaints??[]),cm]}); setShowAddMaint(false);
+    setNewMaint({label:"",icon:"🔩",lastDate:"",lastMileage:"",intervalKm:"",intervalMonths:""});
+  };
+  const deleteCustomMaint = (id) => save({...data,customMaints:(data.customMaints??[]).filter(cm=>cm.id!==id)});
+
+  // メンテナンス項目の手入力保存
+  const saveEditMaint = () => {
+    if (!editMaint) return;
+    if (editMaint.isCustom) {
+      // カスタム項目の更新
+      save({ ...data, customMaints: (data.customMaints??[]).map(cm =>
+        cm.id === editMaint.id ? { ...cm, lastDate: editMaint.editDate||null, lastMileage: editMaint.editMileage?Number(editMaint.editMileage):null } : cm
+      )});
+    } else {
+      // 標準項目：recordsに追加（オイル以外）
+      const newRec = {
+        id: data.nextRecordId,
+        carId: car.id,
+        type: editMaint.id,
+        date: editMaint.editDate ? editMaint.editDate+"-01" : new Date().toISOString().slice(0,10),
+        oilDate: editMaint.id==="oil" ? (editMaint.editDate||null) : undefined,
+        mileage: editMaint.editMileage ? Number(editMaint.editMileage) : 0,
+        cost: 0,
+        note: "",
+      };
+      const upd = { ...data, records: [...data.records, newRec], nextRecordId: data.nextRecordId+1 };
+      if (newRec.mileage > (car.mileage||0)) upd.cars = data.cars.map(c=>c.id===car.id?{...c,mileage:newRec.mileage}:c);
+      save(upd);
+    }
+    setEditMaint(null);
+  };
+
+
+  const reminders=getReminders(), customReminders=getCustomReminders(), allReminders=[...reminders,...customReminders];
+  const urgentCnt=allReminders.filter(r=>r.overdue||r.remaining<=0).length;
+
+  const C = {
+    modal:{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100},
+    mBox:{background:"#0d1f35",border:"1px solid #1e3a5f",borderRadius:"20px 20px 0 0",padding:20,width:"100%",maxWidth:480,maxHeight:"88vh",overflowY:"auto"},
+    card:{background:"#0d1f35",border:"1px solid #1e3a5f",borderRadius:14,padding:14,marginBottom:8},
+    inp:{background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:"9px 12px",color:"#e2e8f0",fontSize:13,width:"100%",boxSizing:"border-box",outline:"none"},
+    sel:{background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:"9px 12px",color:"#e2e8f0",fontSize:13,width:"100%",outline:"none"},
+    lbl:{color:"#64748b",fontSize:11,marginBottom:4,display:"block"},
+    btnP:{background:"#2563eb",border:"none",color:"white",borderRadius:10,padding:"9px 14px",fontSize:12,cursor:"pointer",fontWeight:500},
+    btnG:{background:"transparent",border:"1px solid #334155",color:"white",borderRadius:10,padding:"9px 14px",fontSize:12,cursor:"pointer"},
+    btnD:{background:"#450a0a",border:"1px solid #7f1d1d",color:"#f87171",borderRadius:10,padding:"9px 14px",fontSize:12,cursor:"pointer"},
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#060d1a",color:"#e2e8f0",fontFamily:"'Hiragino Sans','Noto Sans JP',sans-serif"}}>
+      {/* ヘッダー */}
+      <div style={{background:"linear-gradient(135deg,#0a1628,#0f2040)",borderBottom:"1px solid #1e3a5f",padding:"12px 14px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{fontSize:18,fontWeight:700,color:"#38bdf8"}}>🚗 CarNavi</div>
+          <button onClick={()=>setShowMgr(true)} style={{background:"#0d1f35",border:"1px solid #1e3a5f",color:"#93c5fd",borderRadius:9,padding:"6px 12px",fontSize:12,cursor:"pointer"}}>🔧 車両管理</button>
+        </div>
+        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
+          {data.cars.map(c=>(
+            <button key={c.id} onClick={()=>setSelId(c.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:12,border:selId===c.id?`2px solid ${c.color}`:"2px solid #1e3a5f",background:selId===c.id?`${c.color}22`:"#0d1f35",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+              <span style={{fontSize:20}}>{c.icon}</span>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontSize:13,fontWeight:600,color:selId===c.id?c.color:"#e2e8f0"}}>{c.name}</div>
+                <div style={{fontSize:10,color:"#64748b"}}>{c.mileage.toLocaleString()}km</div>
+              </div>
+            </button>
+          ))}
+          <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 12px",borderRadius:12,border:"2px dashed #334155",background:"transparent",cursor:"pointer",color:"#64748b",whiteSpace:"nowrap",flexShrink:0,fontSize:12}}>＋ 追加</button>
+        </div>
+      </div>
+
+      {/* タブ */}
+      <div style={{display:"flex",background:"#0a1628",borderBottom:"1px solid #1e293b",padding:"0 10px",overflowX:"auto"}}>
+        {[["home","🏠 ホーム"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{padding:"12px 14px",fontSize:12,cursor:"pointer",border:"none",background:"none",color:tab===id?"#38bdf8":"#64748b",borderBottom:tab===id?"2px solid #38bdf8":"2px solid transparent",fontWeight:tab===id?600:400,whiteSpace:"nowrap"}}>
+            {label}{id==="home"&&urgentCnt>0&&<span style={{background:"#ef4444",color:"white",borderRadius:10,fontSize:9,padding:"1px 5px",marginLeft:4}}>{urgentCnt}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div style={{padding:14,maxWidth:480,margin:"0 auto"}}>
+        {/* ホーム */}
+        {tab==="home"&&car&&<>
+          <div style={{...C.card,background:`linear-gradient(135deg,${car.color}33,${car.color}11)`,borderColor:car.color,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:12}}>
+              <span style={{fontSize:40}}>{car.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:20,fontWeight:700,color:"white"}}>{car.name}</div>
+              </div>
+            </div>
+            {(car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)?(
+              <div style={{borderTop:"1px solid #1e3a5f33",paddingTop:10,display:"flex",flexWrap:"wrap",gap:"8px 20px"}}>
+                {car.firstReg&&<div style={{fontSize:12}}><span style={{color:"#64748b"}}>初年度登録: </span><span style={{color:"#cbd5e1"}}>{car.firstReg.replace("-","年")}月</span></div>}
+                {car.carType&&<div style={{fontSize:12}}><span style={{color:"#64748b"}}>型式: </span><span style={{color:"#cbd5e1"}}>{car.carType}</span></div>}
+                {car.chassisNo&&<div style={{fontSize:12}}><span style={{color:"#64748b"}}>車台番号: </span><span style={{color:"#cbd5e1"}}>{car.chassisNo}</span></div>}
+                {car.shakenExpiry&&<div style={{fontSize:12}}><span style={{color:"#64748b"}}>車検: </span><span style={{color:new Date(car.shakenExpiry)<new Date()?"#f87171":"#cbd5e1"}}>{car.shakenExpiry.replace("-","年")}月まで</span></div>}
+                {car.jibaishaExpiry&&<div style={{fontSize:12}}><span style={{color:"#64748b"}}>自賠責: </span><span style={{color:new Date(car.jibaishaExpiry)<new Date()?"#f87171":"#cbd5e1"}}>{car.jibaishaExpiry.replace("-","年")}月まで</span></div>}
+              </div>
+            ):(
+              <div style={{color:"#475569",fontSize:12,textAlign:"center",paddingTop:8}}>🔧 車両管理から車検証情報を入力してください</div>
+            )}
+          </div>
+
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{color:"#64748b",fontSize:10,letterSpacing:1}}>メンテナンス</div>
+            <button onClick={()=>setShowAddMaint(true)} style={{background:"transparent",border:"1px solid #334155",color:"#93c5fd",borderRadius:8,padding:"4px 10px",fontSize:11,cursor:"pointer"}}>＋ 項目追加</button>
+          </div>
+          {allReminders.length===0&&<div style={{color:"#475569",fontSize:13,textAlign:"center",padding:20}}>記録がありません</div>}
+          {reminders.map(r=>(
+            <div key={r.id} onClick={()=>setEditMaint({...r, editDate: r.isOil?(r.lastDate?r.lastDate.slice(0,7):""):(r.lastDate?r.lastDate.slice(0,7):""), editMileage: r.isOil?(r.lastMileage||""):(r.lastMileageVal||"")})} style={{...C.card,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+              <span style={{fontSize:18}}>{r.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:500,fontSize:13,color:r.overdue?"#f87171":"#e2e8f0"}}>{r.label}</div>
+                {r.isOil?(
+                  <div style={{fontSize:11,marginTop:3}}>
+                    <div style={{color:"#64748b",marginBottom:3}}>前回: {r.lastDate?`${r.lastDate.slice(0,7).replace("-","年").replace("-","月")} · ${r.lastMileage.toLocaleString()}km`:"未記録"}</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <span style={{color:r.kmOver?"#f87171":"#38bdf8"}}>🛣 {r.nextKm.toLocaleString()}km</span>
+                      <span style={{color:"#334155"}}>·</span>
+                      <span style={{color:r.dateOver?"#f87171":"#38bdf8"}}>📅 {r.nextMonth}</span>
+                    </div>
+                  </div>
+                ):(
+                  <div style={{fontSize:11,color:"#64748b",marginTop:1}}>
+                    {r.isDateBased?(r.lastDate?`前回: ${r.lastDate} · 次回: ${r.nextDate}`:"未記録"):(r.lastDate?`前回: ${r.lastDate}${r.lastMileageVal?" · "+r.lastMileageVal.toLocaleString()+"km":""}`:"未記録")}
+                  </div>
+                )}
+              </div>
+              <div style={{color:"#334155",fontSize:16}}>›</div>
+              {r.overdue&&<div style={{fontSize:12,fontWeight:600,color:"#f87171",flexShrink:0}}>要対応</div>}
+            </div>
+          ))}
+          {customReminders.map(r=>(
+            <div key={r.id} style={{...C.card,padding:"11px 14px",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:18}} onClick={()=>setEditMaint({...r, editDate:r.lastDate?r.lastDate.slice(0,7):"", editMileage:r.lastMileage||""})}>{r.icon}</span>
+              <div style={{flex:1,cursor:"pointer"}} onClick={()=>setEditMaint({...r, editDate:r.lastDate?r.lastDate.slice(0,7):"", editMileage:r.lastMileage||""})}>
+                <div style={{fontWeight:500,fontSize:13,color:r.overdue?"#f87171":"#e2e8f0"}}>{r.label}</div>
+                <div style={{fontSize:11,color:"#64748b",marginTop:2}}>
+                  {(r.lastDate||r.lastMileage)?`前回: ${r.lastDate?r.lastDate.slice(0,7).replace("-","年")+"月":""}${r.lastDate&&r.lastMileage?" · ":""}${r.lastMileage?r.lastMileage.toLocaleString()+"km":""}`:"未記録"}
+                  {(r.nextKm||r.nextMonth)&&<span style={{marginLeft:6}}>{r.nextKm&&<span style={{color:r.kmOver?"#f87171":"#38bdf8"}}>🛣 {r.nextKm.toLocaleString()}km </span>}{r.nextMonth&&<span style={{color:r.dateOver?"#f87171":"#38bdf8"}}>📅 {r.nextMonth}</span>}</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {r.overdue&&<div style={{fontSize:12,fontWeight:600,color:"#f87171"}}>要対応</div>}
+                {!r.intervalKm&&!r.intervalMonths&&(
+                  <button onClick={()=>{const today=new Date().toISOString().slice(0,7);save({...data,customMaints:(data.customMaints??[]).map(cm=>cm.id===r.id?{...cm,lastDate:today}:cm)});}} style={{background:"#1e3a5f",border:"1px solid #2563eb",color:"#93c5fd",borderRadius:8,padding:"4px 8px",fontSize:11,cursor:"pointer"}}>今日記録</button>
+                )}
+                <button onClick={()=>deleteCustomMaint(r.id)} style={{background:"none",border:"none",color:"#475569",cursor:"pointer",fontSize:14}}>🗑</button>
+              </div>
+            </div>
+          ))}
+          <button onClick={()=>setShowRec(true)} style={{background:"#2563eb",border:"none",color:"white",borderRadius:12,padding:"12px",fontSize:14,cursor:"pointer",fontWeight:500,width:"100%",marginTop:6}}>＋ メンテナンスを記録</button>
+        </>}
+
+        {/* 費用 */}
+        {tab==="cost"&&<>
+          <div style={{...C.card,textAlign:"center",marginBottom:14}}>
+            <div style={{color:"#64748b",fontSize:12}}>総メンテナンス費用</div>
+            <div style={{fontSize:32,fontWeight:700,color:"#38bdf8",marginTop:4}}>¥{total.toLocaleString()}</div>
+          </div>
+          {MAINTENANCE_TYPES.map(mt=>{const mrecs=recs.filter(r=>r.type===mt.id);const cost=mrecs.reduce((s,r)=>s+(Number(r.cost)||0),0);if(cost===0)return null;return(
+            <div key={mt.id} style={{...C.card,padding:"11px 14px",display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:18}}>{mt.icon}</span>
+              <div style={{flex:1}}><div style={{fontSize:13}}>{mt.label}</div><div style={{color:"#64748b",fontSize:11}}>{mrecs.length}回</div></div>
+              <div style={{color:"#38bdf8",fontWeight:600,fontSize:13}}>¥{cost.toLocaleString()}</div>
+            </div>
+          );})}
+          {total===0&&<div style={{color:"#475569",textAlign:"center",padding:40,fontSize:13}}>費用の記録がありません</div>}
+        </>}
+
+        {/* AI */}
+        {tab==="ai"&&<AIAdvisor records={data.records} cars={data.cars} selectedCarId={selId}/>}
+      </div>
+
+      {/* 記録モーダル */}
+      {showRec&&(
+        <div style={C.modal} onClick={()=>setShowRec(false)}>
+          <div style={C.mBox} onClick={e=>e.stopPropagation()}>
+            <h3 style={{margin:"0 0 16px",fontSize:15}}>{car?.icon} {car?.name} のメンテナンスを記録</h3>
+            <div style={{marginBottom:10}}><label style={C.lbl}>種類</label><select value={rec.type} onChange={e=>setRec({...rec,type:e.target.value})} style={C.sel}>{MAINTENANCE_TYPES.map(m=><option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}</select></div>
+            {rec.type==="oil"?(
+              <>
+                <div style={{marginBottom:10}}><label style={C.lbl}>交換した走行距離 (km) *</label><input type="number" value={rec.mileage} onChange={e=>setRec({...rec,mileage:e.target.value})} placeholder={car?.mileage?.toString()??""} style={C.inp}/></div>
+                <div style={{marginBottom:10}}><label style={C.lbl}>交換した月 (年月) *</label><input type="month" value={rec.oilDate??""} onChange={e=>setRec({...rec,oilDate:e.target.value+"-01",date:e.target.value+"-01"})} style={C.inp}/></div>
+                <div style={{marginBottom:10}}><label style={C.lbl}>費用 (円)</label><input type="number" value={rec.cost} onChange={e=>setRec({...rec,cost:e.target.value})} placeholder="例: 3500" style={C.inp}/></div>
+                <div style={{marginBottom:10}}><label style={C.lbl}>メモ</label><input type="text" value={rec.note} onChange={e=>setRec({...rec,note:e.target.value})} placeholder="例: 〇〇で交換" style={C.inp}/></div>
+              </>
+            ):(
+              [["date","日付","date",""],["mileage","走行距離 (km) *","number",car?.mileage?.toString()??""],["cost","費用 (円)","number","例: 3500"],["note","メモ","text","例: 〇〇で交換"]].map(([k,l,t,ph])=>(
+                <div key={k} style={{marginBottom:10}}><label style={C.lbl}>{l}</label><input type={t} value={rec[k]??""} onChange={e=>setRec({...rec,[k]:e.target.value})} placeholder={ph} style={C.inp}/></div>
+              ))
+            )}
+            <div style={{display:"flex",gap:10,marginTop:14}}>
+              <button onClick={()=>setShowRec(false)} style={{...C.btnG,flex:1}}>キャンセル</button>
+              <button onClick={addRecord} style={{...C.btnP,flex:2}}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 車両管理モーダル */}
+      {showMgr&&(
+        <div style={C.modal} onClick={()=>setShowMgr(false)}>
+          <div style={C.mBox} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <h3 style={{margin:0,fontSize:15}}>車両管理</h3>
+              <button onClick={()=>{setShowAdd(true);setShowMgr(false);}} style={C.btnP}>＋ 新しい車を追加</button>
+            </div>
+            {data.cars.map(c=>(
+              <div key={c.id} style={{background:"#0a1628",border:"1px solid #1e3a5f",borderRadius:12,padding:14,marginBottom:8}}>
+                {editCar?.id===c.id?(<CarForm car={editCar} setCar={setEditCar} onSubmit={updateCar} onCancel={()=>setEditCar(null)} submitLabel="更新"/>):(
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:26}}>{c.icon}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,fontSize:13,color:c.color}}>{c.name}</div>
+                      <div style={{color:"#64748b",fontSize:11}}>{c.maker} {c.model} · {c.year}年式 · {c.mileage.toLocaleString()}km</div>
+                      {c.oilInterval>0&&<div style={{color:"#475569",fontSize:10,marginTop:2}}>オイル: {c.oilInterval.toLocaleString()}kmごと {c.oilType?`(${c.oilType})`:""}</div>}
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>setEditCar({...c})} style={C.btnG}>編集</button>
+                      {data.cars.length>1&&<button onClick={()=>deleteCar(c.id)} style={C.btnD}>削除</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            <button onClick={()=>setShowMgr(false)} style={{...C.btnG,width:"100%",marginTop:4}}>閉じる</button>
+          </div>
+        </div>
+      )}
+
+      {/* 車追加モーダル */}
+      {showAdd&&(
+        <div style={C.modal} onClick={()=>setShowAdd(false)}>
+          <div style={C.mBox} onClick={e=>e.stopPropagation()}>
+            <h3 style={{margin:"0 0 16px",fontSize:15}}>新しい車を追加</h3>
+            <CarForm car={newCar} setCar={setNewCar} onSubmit={addCar} onCancel={()=>setShowAdd(false)} submitLabel="追加"/>
+          </div>
+        </div>
+      )}
+
+      {/* メンテナンス項目追加モーダル */}
+      {showAddMaint&&(
+        <div style={C.modal} onClick={()=>setShowAddMaint(false)}>
+          <div style={C.mBox} onClick={e=>e.stopPropagation()}>
+            <h3 style={{margin:"0 0 4px",fontSize:15}}>メンテナンス項目を追加</h3>
+            <div style={{color:"#64748b",fontSize:11,marginBottom:16}}>{car?.name} に追加されます</div>
+            <div style={{marginBottom:12}}>
+              <label style={C.lbl}>アイコン</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["🔩","🚗","🛞","💡","🔦","🧴","🪟","🔑","🛡️","🔌","🌡️","⛽"].map(ic=>(
+                  <button key={ic} onClick={()=>setNewMaint({...newMaint,icon:ic})} style={{fontSize:18,background:newMaint.icon===ic?"#1e3a5f":"transparent",border:newMaint.icon===ic?"2px solid #38bdf8":"2px solid #1e293b",borderRadius:8,padding:"4px 7px",cursor:"pointer"}}>{ic}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{marginBottom:10}}><label style={C.lbl}>項目名 *</label><input type="text" value={newMaint.label} onChange={e=>setNewMaint({...newMaint,label:e.target.value})} placeholder="例: スパークプラグ交換" style={C.inp}/></div>
+            <div style={{borderTop:"1px solid #1e3a5f",margin:"12px 0",paddingTop:12}}>
+              <div style={{color:"#38bdf8",fontSize:11,marginBottom:10}}>前回の交換</div>
+              <div style={{display:"flex",gap:10,marginBottom:10}}>
+                <div style={{flex:1}}><label style={C.lbl}>年月</label><input type="month" value={(newMaint.lastDate??"").slice(0,7)} onChange={e=>setNewMaint({...newMaint,lastDate:e.target.value})} style={C.inp}/></div>
+                <div style={{flex:1}}><label style={C.lbl}>走行距離 (km)</label><input type="number" value={newMaint.lastMileage} onChange={e=>setNewMaint({...newMaint,lastMileage:e.target.value})} placeholder="例: 80000" style={C.inp}/></div>
+              </div>
+            </div>
+            <div style={{borderTop:"1px solid #1e3a5f",margin:"0 0 12px",paddingTop:12}}>
+              <div style={{color:"#38bdf8",fontSize:11,marginBottom:10}}>次回の目安（どちらか一方でもOK）</div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:1}}><label style={C.lbl}>交換周期 (km)</label><input type="number" value={newMaint.intervalKm} onChange={e=>setNewMaint({...newMaint,intervalKm:e.target.value})} placeholder="例: 30000" style={C.inp}/></div>
+                <div style={{flex:1}}><label style={C.lbl}>交換周期 (ヶ月)</label><input type="number" value={newMaint.intervalMonths} onChange={e=>setNewMaint({...newMaint,intervalMonths:e.target.value})} placeholder="例: 12" style={C.inp}/></div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              <button onClick={()=>setShowAddMaint(false)} style={{...C.btnG,flex:1}}>キャンセル</button>
+              <button onClick={addCustomMaint} style={{...C.btnP,flex:2}}>追加</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* メンテナンス手入力モーダル */}
+      {editMaint&&(
+        <div style={C.modal} onClick={()=>setEditMaint(null)}>
+          <div style={C.mBox} onClick={e=>e.stopPropagation()}>
+            <h3 style={{margin:"0 0 4px",fontSize:15}}>{editMaint.icon} {editMaint.label}</h3>
+            <div style={{color:"#64748b",fontSize:11,marginBottom:16}}>前回の情報を入力してください</div>
+            <div style={{marginBottom:12}}>
+              <label style={C.lbl}>交換・点検した月</label>
+              <input type="month" value={editMaint.editDate??""} onChange={e=>setEditMaint({...editMaint,editDate:e.target.value})} style={C.inp}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <label style={C.lbl}>そのときの走行距離 (km)</label>
+              <input type="number" value={editMaint.editMileage??""} onChange={e=>setEditMaint({...editMaint,editMileage:e.target.value})} placeholder="例: 84000" style={C.inp}/>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setEditMaint(null)} style={{...C.btnG,flex:1}}>キャンセル</button>
+              <button onClick={saveEditMaint} style={{...C.btnP,flex:2}}>保存</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
