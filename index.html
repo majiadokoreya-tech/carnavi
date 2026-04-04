@@ -353,7 +353,7 @@ function CarTab({ data, save }) {
     // 車選択
     e("div",{style:{padding:"12px 14px",borderBottom:"1px solid #1e3a5f",display:"flex",gap:8,overflowX:"auto",alignItems:"center"}},
       ...data.cars.map(c=>
-        e("button",{key:c.id,onClick:()=>setSelCarId(c.id),style:{padding:"8px 14px",borderRadius:12,border:selCarId===c.id?("2px solid "+c.color):"2px solid #e2e8f0",background:selCarId===c.id?(c.color+"22"):"#f8fafc",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,fontSize:13,fontWeight:600,color:selCarId===c.id?c.color:"#1e293b"}},c.name)
+        e("button",{key:c.id,onClick:()=>setSelCarId(c.id),style:{padding:"8px 14px",borderRadius:12,border:selCarId===c.id?("2px solid "+c.color):"2px solid #e2e8f0",background:selCarId===c.id?c.color:"#f8fafc",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,fontSize:13,fontWeight:600,color:selCarId===c.id?"#ffffff":"#1e293b"}},c.name)
       ),
       e("button",{onClick:()=>setShowAdd(true),style:{padding:"8px 14px",borderRadius:12,border:"2px dashed #334155",background:"transparent",cursor:"pointer",color:"#64748b",whiteSpace:"nowrap",flexShrink:0,fontSize:12}},"追加"),
       e("button",{className:"btn-g",onClick:()=>setShowMgr(true),style:{fontSize:11,padding:"6px 10px",flexShrink:0,marginLeft:"auto"}},"車両管理")
@@ -362,7 +362,7 @@ function CarTab({ data, save }) {
     e("div",{style:{padding:14,maxWidth:480,margin:"0 auto"},onTouchMove:onTouchMove,onTouchEnd:onTouchEnd},
       // 車両カード
       car&&e("div",{className:"card",style:{background:"linear-gradient(135deg,"+car.color+"33,"+car.color+"11)",borderColor:car.color,marginBottom:14}},
-        e("div",{style:{fontSize:20,fontWeight:700,color:"white",marginBottom:(car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)?10:0}},car.name),
+        e("div",{style:{fontSize:20,fontWeight:700,color:"#111827",marginBottom:(car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)?10:0}},car.name),
         (car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)
           ?e("div",{style:{borderTop:"1px solid #e2e8f0",paddingTop:10,display:"flex",flexWrap:"wrap",gap:"8px 20px"}},
             car.firstReg&&e("div",{key:"fr",style:{fontSize:12}},e("span",{style:{color:"#64748b"}},"初年度登録: "),e("span",{style:{color:"#374151"}},fmtYM(car.firstReg))),
@@ -371,7 +371,7 @@ function CarTab({ data, save }) {
             car.shakenExpiry&&e("div",{key:"se",style:{fontSize:12}},e("span",{style:{color:"#64748b"}},"車検: "),e("span",{style:{color:new Date(car.shakenExpiry)<new Date()?"#ef4444":"#374151"}},car.shakenExpiry.replace("-","年")+"月まで")),
             car.jibaishaExpiry&&e("div",{key:"je",style:{fontSize:12}},e("span",{style:{color:"#64748b"}},"自賠責: "),e("span",{style:{color:new Date(car.jibaishaExpiry)<new Date()?"#ef4444":"#374151"}},car.jibaishaExpiry.replace("-","年")+"月まで"))
           )
-          :e("div",{style:{color:"#94a3b8",fontSize:12}},"車両管理から車検証情報を入力してください")
+          :e("div",{style:{color:"#64748b",fontSize:12}},"車両管理から車検証情報を入力してください")
       ),
 
       // メンテナンスヘッダー
