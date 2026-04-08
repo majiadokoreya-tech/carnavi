@@ -43,8 +43,8 @@ const STORAGE_KEY = "maintenance_app_v1";
 const initialData = {
   // 車タブ
   cars: [
-    { id: 1, name: "セレナ", maker: "Nissan", model: "Serena", year: 2020, mileage: 86000, color: "#2563eb", oilInterval: 6000, oilType: "0W20", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "" },
-    { id: 2, name: "エブリィワゴン", maker: "Suzuki", model: "Every Wagon", year: 2025, mileage: 0, color: "#16a34a", oilInterval: 3000, oilType: "5W30", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "" },
+    { id: 1, name: "セレナ", maker: "Nissan", model: "Serena", year: 2020, mileage: 86000, color: "#2563eb", oilInterval: 6000, oilType: "0W20", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "", plateNo: "" },
+    { id: 2, name: "エブリィワゴン", maker: "Suzuki", model: "Every Wagon", year: 2025, mileage: 0, color: "#16a34a", oilInterval: 3000, oilType: "5W30", shakenExpiry: "", jibaishaExpiry: "", firstReg: "", carType: "", chassisNo: "", plateNo: "" },
   ],
   records: [
     { id: 1, carId: 1, type: "cvt",     date: "2024-09-01", mileage: 72000, cost: 0, note: "" },
@@ -96,7 +96,7 @@ function useStorage() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        const mergedCars = (saved.cars||[]).map(c => ({ ...(initialData.cars.find(ic=>ic.id===c.id)||{}), ...c }));
+        const mergedCars = (saved.cars||[]).map(c => { const init=initialData.cars.find(ic=>ic.id===c.id)||{}; return {...init,...c,plateNo:c.plateNo||init.plateNo||""}; });
         setData({ ...initialData, ...saved, cars: mergedCars });
       }
     } catch(err) {}
@@ -257,7 +257,8 @@ function CarForm({ car, setCar, onSubmit, onCancel, submitLabel }) {
         e("div",{key:k,style:{marginBottom:10}},e("label",{className:"lbl"},l),e("input",{className:"inp",type:"month",value:(car[k]||"").slice(0,7),onChange:ev=>setCar({...car,[k]:ev.target.value})}))
       ),
       e(Inp,{label:"型式",value:car.carType||"",placeholder:"例: C27",onChange:ev=>setCar({...car,carType:ev.target.value})}),
-      e(Inp,{label:"車台番号",value:car.chassisNo||"",placeholder:"例: C27-000001",onChange:ev=>setCar({...car,chassisNo:ev.target.value})})
+      e(Inp,{label:"車台番号",value:car.chassisNo||"",placeholder:"例: C27-000001",onChange:ev=>setCar({...car,chassisNo:ev.target.value})}),
+      e(Inp,{label:"ナンバープレート",value:car.plateNo||"",placeholder:"例: 岐阜 300 あ 1234",onChange:ev=>setCar({...car,plateNo:ev.target.value})})
     ),
     e("div",{style:{display:"flex",gap:10,marginTop:14}},
       e("button",{className:"btn-g",style:{flex:1},onClick:onCancel},"キャンセル"),
@@ -276,7 +277,7 @@ function CarTab({ data, save }) {
   const [editMaint, setEditMaint] = useState(null);
   const [editCar, setEditCar] = useState(null);
   const [rec, setRec] = useState({type:"oil",date:new Date().toISOString().slice(0,10),mileage:"",cost:"",note:"",oilDate:""});
-  const [newCar, setNewCar] = useState({name:"",maker:"",model:"",year:new Date().getFullYear(),mileage:"",color:"#2563eb",oilInterval:5000,oilType:"",shakenExpiry:"",jibaishaExpiry:"",firstReg:"",carType:"",chassisNo:""});
+  const [newCar, setNewCar] = useState({name:"",maker:"",model:"",year:new Date().getFullYear(),mileage:"",color:"#2563eb",oilInterval:5000,oilType:"",shakenExpiry:"",jibaishaExpiry:"",firstReg:"",carType:"",chassisNo:"",plateNo:""});
   const [newMaint, setNewMaint] = useState({label:"",lastDate:"",lastMileage:"",intervalKm:"",intervalMonths:""});
 
   const car = data.cars.find(c=>c.id===selCarId)||data.cars[0]||null;
@@ -329,7 +330,7 @@ function CarTab({ data, save }) {
     const c={...newCar,id:data.nextCarId,mileage:Number(newCar.mileage)||0};
     save({...data,cars:[...data.cars,c],nextCarId:data.nextCarId+1});
     setSelCarId(c.id);setShowAdd(false);
-    setNewCar({name:"",maker:"",model:"",year:new Date().getFullYear(),mileage:"",color:"#2563eb",oilInterval:5000,oilType:"",shakenExpiry:"",jibaishaExpiry:"",firstReg:"",carType:"",chassisNo:""});
+    setNewCar({name:"",maker:"",model:"",year:new Date().getFullYear(),mileage:"",color:"#2563eb",oilInterval:5000,oilType:"",shakenExpiry:"",jibaishaExpiry:"",firstReg:"",carType:"",chassisNo:"",plateNo:""});
   };
   const updateCar=()=>{
     if(!editCar?.name.trim())return;
@@ -362,8 +363,11 @@ function CarTab({ data, save }) {
     e("div",{style:{padding:14,maxWidth:480,margin:"0 auto"},onTouchMove:onTouchMove,onTouchEnd:onTouchEnd},
       // 車両カード
       car&&e("div",{className:"card",style:{background:"linear-gradient(135deg,"+car.color+"33,"+car.color+"11)",borderColor:car.color,marginBottom:14}},
-        e("div",{style:{fontSize:20,fontWeight:700,color:"#111827",marginBottom:(car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)?10:0}},car.name),
-        (car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo)
+        e("div",{style:{display:"flex",alignItems:"baseline",gap:10,marginBottom:(car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo||car.plateNo)?10:0}},
+          e("div",{style:{fontSize:20,fontWeight:700,color:"#111827"}},car.name),
+          car.plateNo&&e("div",{style:{fontSize:13,color:"#374151",fontWeight:500}},car.plateNo)
+        ),
+        (car.shakenExpiry||car.jibaishaExpiry||car.firstReg||car.carType||car.chassisNo||car.plateNo)
           ?e("div",{style:{borderTop:"1px solid #e2e8f0",paddingTop:10,display:"flex",flexWrap:"wrap",gap:"8px 20px"}},
             car.firstReg&&e("div",{key:"fr",style:{fontSize:12}},e("span",{style:{color:"#64748b"}},"初年度登録: "),e("span",{style:{color:"#374151"}},fmtYM(car.firstReg))),
             car.carType&&e("div",{key:"ct",style:{fontSize:12}},e("span",{style:{color:"#64748b"}},"型式: "),e("span",{style:{color:"#374151"}},car.carType)),
