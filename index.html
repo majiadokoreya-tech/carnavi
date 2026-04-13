@@ -246,7 +246,7 @@ function getCarReminders(car, recs) {
   if (!car) return [];
   return CAR_TYPES.map(m => {
     if (m.id === "oil") {
-      const oilRecs = recs.filter(r=>r.type==="oil").sort((a,b)=>b.date.localeCompare(a.date));
+      const oilRecs = recs.filter(r=>r.type==="oil").sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
       const last = oilRecs[0];
       if (!last) return { ...m, lastDate:null, lastMileage:null, nextKm:null, nextMonth:null, kmOver:false, dateOver:false, overdue:false, isOil:true, usesDate:car.id===1, elementDue:false, rotationDue:false, remaining:999999 };
       const interval = car.oilInterval>0?car.oilInterval:6000;
@@ -260,7 +260,7 @@ function getCarReminders(car, recs) {
       const overdue = false;
       const note = last.note||"";
       const elementDue = note.includes("エレメント交換あり");
-      const rotationDue = oilRecs.length>0?(car.id===1?true:note.includes("ローテーションあり")):false;
+      const rotationDue = note.includes("ローテーションあり");
       return { ...m, lastDate, lastMileage:last.mileage, nextKm, kmRemain, nextMonth, dateOver, kmOver, overdue, isOil:true, usesDate, elementDue, rotationDue, remaining:overdue?-1:kmRemain };
     }
     if (["filter","wiper","battery"].includes(m.id)) {
