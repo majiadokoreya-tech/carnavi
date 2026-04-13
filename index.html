@@ -363,9 +363,40 @@ function Inp({ label, type, value, onChange, placeholder }) {
   return e("div",{style:{marginBottom:10}},e("label",{className:"lbl"},label),e("input",{className:"inp",type:type||"text",value:value||"",onChange,placeholder:placeholder||""}));
 }
 
+// 年月プルダウン（和暦付き）
+function MonthPicker({ label, value, onChange, style }) {
+  const currentYear = new Date().getFullYear();
+  const years = [];
+  for (let y = currentYear + 5; y >= 1990; y--) {
+    let w = "";
+    if (y >= 2019) w = "令和"+(y-2018)+"年";
+    else if (y >= 1989) w = "平成"+(y-1988)+"年";
+    else if (y >= 1926) w = "昭和"+(y-1925)+"年";
+    years.push({ y, label: y+"年 ("+w+")" });
+  }
+  const selYear = value ? parseInt(value.slice(0,4)) : "";
+  const selMonth = value ? parseInt(value.slice(5,7)) : "";
+  const wareki = value ? toWareki(value) : "";
+  const setYear = (y) => { const m = selMonth||1; onChange((y+"-"+(String(m).padStart(2,"0")))); };
+  const setMonth = (m) => { if (!selYear) return; onChange((selYear+"-"+(String(m).padStart(2,"0")))); };
+  return e("div",{style:{marginBottom:10,...(style||{})}},
+    label&&e("label",{className:"lbl"},label),
+    e("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+      e("select",{className:"sel",style:{flex:"0 0 auto",width:"auto"},value:selYear||"",onChange:ev=>setYear(ev.target.value)},
+        e("option",{value:""},"年"),
+        years.map(({y,label})=>e("option",{key:y,value:y},label))
+      ),
+      e("select",{className:"sel",style:{flex:"0 0 auto",width:"auto"},value:selMonth||"",onChange:ev=>setMonth(ev.target.value)},
+        e("option",{value:""},"月"),
+        [1,2,3,4,5,6,7,8,9,10,11,12].map(m=>e("option",{key:m,value:m},m+"月"))
+      ),
+      wareki&&e("div",{style:{fontSize:13,color:"var(--text2)",fontWeight:600,whiteSpace:"nowrap"}},wareki)
+    )
+  );
+}
+
 // ── CarForm ──
 function CarForm({ car, setCar, onSubmit, onCancel, submitLabel }) {
-  const wareki = toWareki(car.firstReg);
   return e("div",null,
     e("div",{style:{marginBottom:14}},
       e("label",{className:"lbl"},"カラー"),
@@ -382,9 +413,7 @@ function CarForm({ car, setCar, onSubmit, onCancel, submitLabel }) {
     e("div",{style:{borderTop:"1px solid var(--border)",margin:"12px 0",paddingTop:12}},
       e("div",{style:{color:"var(--blue)",fontSize:11,marginBottom:10}},"車検証情報"),
       e("div",{style:{marginBottom:10}},
-        e("label",{className:"lbl"},"初年度登録年月"),
-        e("input",{className:"inp",type:"month",value:(car.firstReg||"").slice(0,7),onChange:ev=>setCar({...car,firstReg:ev.target.value})}),
-        wareki&&e("div",{style:{fontSize:12,color:"var(--text2)",marginTop:4}},wareki)
+        e(MonthPicker,{label:"初年度登録年月",value:(car.firstReg||"").slice(0,7),onChange:v=>setCar({...car,firstReg:v})})
       ),
       e("div",{style:{marginBottom:10}},e("label",{className:"lbl"},"車検有効期限"),e("input",{className:"inp",type:"date",value:(car.shakenExpiry||"").slice(0,10),onChange:ev=>setCar({...car,shakenExpiry:ev.target.value})})),
       e(Inp,{label:"型式",value:car.carType||"",placeholder:"例: C27",onChange:ev=>setCar({...car,carType:ev.target.value})}),
@@ -546,7 +575,7 @@ function CarTab({ data, save }) {
       e("h3",{style:{margin:"0 0 18px",fontSize:16,fontWeight:700,color:"var(--text)"}},car?.name+" のメンテナンスを記録"),
       e("div",{style:{marginBottom:10}},e("label",{className:"lbl"},"種類"),e("select",{className:"sel",value:rec.type,onChange:ev=>setRec({...rec,type:ev.target.value})},CAR_TYPES.map(m=>e("option",{key:m.id,value:m.id},m.label)))),
       rec.type==="oil"
-        ?e("div",null,e(Inp,{label:"交換した走行距離 (km) *",type:"number",value:rec.mileage,placeholder:car?.mileage?.toString()||"",onChange:ev=>setRec({...rec,mileage:ev.target.value})}),e(Inp,{label:"交換した日 *",type:"date",value:rec.oilDate,onChange:ev=>setRec({...rec,oilDate:ev.target.value.slice(0,7),date:ev.target.value})}),e(Inp,{label:"費用 (円)",type:"number",value:rec.cost,placeholder:"例: 3500",onChange:ev=>setRec({...rec,cost:ev.target.value})}),e(Inp,{label:"メモ",value:rec.note,onChange:ev=>setRec({...rec,note:ev.target.value})}))
+        ?e("div",null,e(Inp,{label:"交換した走行距離 (km) *",type:"number",value:rec.mileage,placeholder:car?.mileage?.toString()||"",onChange:ev=>setRec({...rec,mileage:ev.target.value})}),e(MonthPicker,{label:"交換した月 *",value:rec.oilDate||"",onChange:v=>setRec({...rec,oilDate:v,date:v+"-01"})}),e(Inp,{label:"費用 (円)",type:"number",value:rec.cost,placeholder:"例: 3500",onChange:ev=>setRec({...rec,cost:ev.target.value})}),e(Inp,{label:"メモ",value:rec.note,onChange:ev=>setRec({...rec,note:ev.target.value})}))
         :e("div",null,e(Inp,{label:"日付",type:"date",value:rec.date,onChange:ev=>setRec({...rec,date:ev.target.value})}),e(Inp,{label:"走行距離 (km) *",type:"number",value:rec.mileage,placeholder:car?.mileage?.toString()||"",onChange:ev=>setRec({...rec,mileage:ev.target.value})}),e(Inp,{label:"費用 (円)",type:"number",value:rec.cost,placeholder:"例: 3500",onChange:ev=>setRec({...rec,cost:ev.target.value})}),e(Inp,{label:"メモ",value:rec.note,onChange:ev=>setRec({...rec,note:ev.target.value})})),
       e("div",{style:{display:"flex",gap:10,marginTop:14}},e("button",{className:"btn-g",style:{flex:1},onClick:()=>setShowRec(false)},"キャンセル"),e("button",{className:"btn-p",style:{flex:2},onClick:addRecord},"保存"))
     ),
@@ -583,7 +612,7 @@ function CarTab({ data, save }) {
       e("div",{style:{borderTop:"1px solid var(--border)",margin:"12px 0",paddingTop:12}},
         e("div",{style:{color:"var(--blue)",fontSize:11,marginBottom:10}},"前回の交換"),
         e("div",{style:{display:"flex",gap:10,marginBottom:10}},
-          e("div",{style:{flex:1}},e("label",{className:"lbl"},"日付"),e("input",{className:"inp",type:"date",value:newMaint.lastDate||"",onChange:ev=>setNewMaint({...newMaint,lastDate:ev.target.value.slice(0,7)})})),
+          e("div",{style:{flex:1}},e(MonthPicker,{label:"年月",value:newMaint.lastDate||"",onChange:v=>setNewMaint({...newMaint,lastDate:v})})),
           e("div",{style:{flex:1}},e("label",{className:"lbl"},"走行距離 (km)"),e("input",{className:"inp",type:"number",value:newMaint.lastMileage||"",placeholder:"例: 80000",onChange:ev=>setNewMaint({...newMaint,lastMileage:ev.target.value})}))
         )
       ),
@@ -603,13 +632,13 @@ function CarTab({ data, save }) {
       editMaint.isOil
         ?e("div",null,
             e(Inp,{label:"交換した走行距離 (km) *",type:"number",value:editMaint.editMileage||"",placeholder:"例: 84000",onChange:ev=>setEditMaint({...editMaint,editMileage:ev.target.value})}),
-            editMaint.usesDate&&e(Inp,{label:"交換した日",type:"date",value:editMaint.editDate||"",onChange:ev=>setEditMaint({...editMaint,editDate:ev.target.value.slice(0,7),editDateFull:ev.target.value})}),
+            editMaint.usesDate&&e(MonthPicker,{label:"交換した月",value:editMaint.editDate||"",onChange:v=>setEditMaint({...editMaint,editDate:v})}),
             e(Inp,{label:"交換インターバル (km)",type:"number",value:editMaint.editInterval||"",placeholder:"例: 6000",onChange:ev=>setEditMaint({...editMaint,editInterval:ev.target.value})}),
             e("div",{style:{marginBottom:10,display:"flex",alignItems:"center",gap:10,background:"#f8f8f8",borderRadius:10,padding:"10px 14px"}},e("input",{type:"checkbox",id:"ec",checked:editMaint.editElementDone||false,onChange:ev=>setEditMaint({...editMaint,editElementDone:ev.target.checked}),style:{width:18,height:18,cursor:"pointer"}}),e("label",{htmlFor:"ec",style:{color:"var(--text)",fontSize:13,cursor:"pointer"}},"今回エレメントも交換した")),
             e("div",{style:{marginBottom:16,display:"flex",alignItems:"center",gap:10,background:"#f8f8f8",borderRadius:10,padding:"10px 14px"}},e("input",{type:"checkbox",id:"rc",checked:editMaint.editRotationDone||false,onChange:ev=>setEditMaint({...editMaint,editRotationDone:ev.target.checked}),style:{width:18,height:18,cursor:"pointer"}}),e("label",{htmlFor:"rc",style:{color:"var(--text)",fontSize:13,cursor:"pointer"}},"今回タイヤローテーションもした"))
           )
         :e("div",null,
-            e(Inp,{label:"交換・点検した日",type:"date",value:editMaint.editDateFull||editMaint.editDate||"",onChange:ev=>setEditMaint({...editMaint,editDate:ev.target.value.slice(0,7),editDateFull:ev.target.value})}),
+            e(MonthPicker,{label:"交換・点検した月",value:editMaint.editDate||"",onChange:v=>setEditMaint({...editMaint,editDate:v})}),
             MILEAGE_TYPES.includes(editMaint.id)&&e(Inp,{label:"そのときの走行距離 (km)",type:"number",value:editMaint.editMileage||"",placeholder:"例: 84000",onChange:ev=>setEditMaint({...editMaint,editMileage:ev.target.value})})
           ),
       e("div",{style:{display:"flex",gap:10}},e("button",{className:"btn-g",style:{flex:1},onClick:()=>setEditMaint(null)},"キャンセル"),e("button",{className:"btn-p",style:{flex:2},onClick:saveEditMaint},"保存")),
@@ -692,7 +721,7 @@ function HomeTab({ data, save }) {
     editItem&&e(Modal,{onClose:()=>setEditItem(null)},
       e("h3",{style:{margin:"0 0 4px",fontSize:16,fontWeight:700,color:"var(--text)"}},editItem.label),
       e("div",{style:{color:"var(--text3)",fontSize:11,marginBottom:16}},"交換情報を入力してください"),
-      e(Inp,{label:"交換した日",type:"date",value:editItem.editDateFull||editItem.editDate||"",onChange:ev=>setEditItem({...editItem,editDate:ev.target.value.slice(0,7),editDateFull:ev.target.value})}),
+      e(MonthPicker,{label:"交換した月",value:editItem.editDate||"",onChange:v=>setEditItem({...editItem,editDate:v})}),
       e(Inp,{label:"メモ",value:editItem.editNote||"",onChange:ev=>setEditItem({...editItem,editNote:ev.target.value})}),
       e("div",{style:{display:"flex",gap:10,marginTop:14}},e("button",{className:"btn-g",style:{flex:1},onClick:()=>setEditItem(null)},"キャンセル"),e("button",{className:"btn-p",style:{flex:2},onClick:saveEdit},"保存")),
       e("button",{className:"btn-d",style:{width:"100%",marginTop:8},onClick:()=>{deleteItem(editItem.id);setEditItem(null);}},"この項目を削除する")
