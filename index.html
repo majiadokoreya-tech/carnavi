@@ -66,10 +66,10 @@
     .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text3); text-transform: uppercase; }
 
     /* 車両カード */
-    .vehicle-card { background: var(--accent); border-radius: 14px; padding: 20px; margin-bottom: 14px; }
-    .vehicle-name { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
-    .vehicle-plate { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 500; }
-    .vehicle-info { font-size: 12px; color: rgba(255,255,255,0.55); margin-top: 2px; }
+    .vehicle-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px; margin-bottom: 14px; }
+    .vehicle-name { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: 0.02em; }
+    .vehicle-plate { font-size: 13px; color: var(--text2); font-weight: 500; }
+    .vehicle-info { font-size: 12px; color: var(--text2); margin-top: 2px; }
 
     /* メンテカード */
     .maint-label { font-size: 14px; font-weight: 600; color: var(--text); }
@@ -140,8 +140,9 @@ const initialData = {
   records: [
     { id: 1, carId: 1, type: "cvt",     date: "2024-09-01", mileage: 72000, cost: 0, note: "" },
     { id: 2, carId: 1, type: "filter",  date: "2026-01-01", mileage: 84000, cost: 0, note: "" },
-    { id: 3, carId: 1, type: "battery", date: "2025-02-01", mileage: 78000, cost: 0, note: "" },
+    { id: 3, carId: 1, type: "battery", date: "2026-03-01", mileage: 86000, cost: 0, note: "" },
     { id: 4, carId: 1, type: "tire",    date: "2025-11-01", mileage: 86000, cost: 0, note: "" },
+    { id: 7, carId: 1, type: "brake",   date: "2025-10-01", mileage: 80000, cost: 0, note: "" },
     { id: 5, carId: 1, type: "wiper",   date: "2025-12-01", mileage: 86000, cost: 0, note: "" },
     { id: 6, carId: 1, type: "oil",     date: "2025-10-01", oilDate: "2025-10", mileage: 84000, cost: 0, note: "" },
   ],
@@ -256,7 +257,7 @@ function getCarReminders(car, recs) {
       const lastDate = last.oilDate||last.date.slice(0,7);
       const nextMonth = usesDate?addMonths(lastDate,6):null;
       const dateOver = usesDate?isOverdue(lastDate,6):false;
-      const overdue = kmOver||(usesDate&&dateOver);
+      const overdue = false;
       const note = last.note||"";
       const elementDue = note.includes("エレメント交換あり");
       const rotationDue = oilRecs.length>0?(car.id===1?true:note.includes("ローテーションあり")):false;
@@ -264,9 +265,9 @@ function getCarReminders(car, recs) {
     }
     if (["filter","wiper","battery"].includes(m.id)) {
       const last = recs.filter(r=>r.type===m.id).sort((a,b)=>b.date.localeCompare(a.date))[0];
-      if (!last) return null;
+      if (!last) return { ...m, lastDate:null, nextDate:null, overdue:false, isDateBased:true, remaining:999999 };
       const expiry = new Date(last.date); expiry.setFullYear(expiry.getFullYear()+1);
-      const overdue = expiry<new Date();
+      const overdue = false;
       return { ...m, lastDate:last.date, nextDate:addOneYear(last.date), overdue, isDateBased:true, remaining:overdue?-1:1 };
     }
     const interval = CAR_INTERVALS[m.id];
@@ -274,7 +275,7 @@ function getCarReminders(car, recs) {
     const last = recs.filter(r=>r.type===m.id).sort((a,b)=>b.mileage-a.mileage)[0];
     const nextKm = last?last.mileage+interval:(car.mileage||0)+interval;
     const remaining = nextKm-(car.mileage||0);
-    return { ...m, lastDate:last?.date||null, lastMileageVal:last?.mileage||null, nextKm, remaining, isDateBased:false, overdue:remaining<=0 };
+    return { ...m, lastDate:last?.date||null, lastMileageVal:last?.mileage||null, nextKm, remaining, isDateBased:false, overdue:false };
   }).filter(Boolean);
 }
 
@@ -285,8 +286,8 @@ function getCarCustomReminders(car, data) {
     const kmOver=nextKm!=null?nextKm-(car.mileage||0)<=0:false;
     const nextMonth=(cm.lastDate&&cm.intervalMonths)?addMonths(cm.lastDate,cm.intervalMonths):null;
     const dateOver=(cm.lastDate&&cm.intervalMonths)?(()=>{const d=new Date(cm.lastDate+"-01");d.setMonth(d.getMonth()+cm.intervalMonths);return d<new Date();})():false;
-    const overdue=kmOver||dateOver;
-    return {...cm,isCustom:true,nextKm,nextMonth,kmOver,dateOver,overdue,remaining:overdue?-1:(nextKm?nextKm-(car.mileage||0):999999)};
+    const overdue=false;
+    return {...cm,isCustom:true,nextKm,nextMonth,kmOver,dateOver,overdue,remaining:nextKm?nextKm-(car.mileage||0):999999};
   });
 }
 
@@ -401,12 +402,7 @@ function MonthPicker({ label, value, onChange, style }) {
 // ── CarForm ──
 function CarForm({ car, setCar, onSubmit, onCancel, submitLabel }) {
   return e("div",null,
-    e("div",{style:{marginBottom:14}},
-      e("label",{className:"lbl"},"カラー"),
-      e("div",{style:{display:"flex",gap:8}},
-        CAR_COLORS.map(col=>e("button",{key:col,onClick:()=>setCar({...car,color:col}),style:{width:26,height:26,background:col,border:car.color===col?"3px solid white":"3px solid transparent",borderRadius:"50%",cursor:"pointer"}}))
-      )
-    ),
+
     e(Inp,{label:"ニックネーム *",value:car.name||"",placeholder:"例: セレナ",onChange:ev=>setCar({...car,name:ev.target.value})}),
     e(Inp,{label:"ナンバープレート",value:car.plateNo||"",placeholder:"例: 岐阜 300 あ 1234",onChange:ev=>setCar({...car,plateNo:ev.target.value})}),
     e("div",{style:{display:"flex",gap:10,marginBottom:10}},
@@ -517,7 +513,7 @@ function CarTab({ data, save }) {
     // 車選択
     e("div",{style:{padding:"12px 14px",borderBottom:"1px solid #1e3a5f",display:"flex",gap:8,overflowX:"auto",alignItems:"center"}},
       ...data.cars.map(c=>
-        e("button",{key:c.id,onClick:()=>setSelCarId(c.id),style:{padding:"8px 14px",borderRadius:12,border:selCarId===c.id?"2px solid var(--accent)":"2px solid var(--border)",background:selCarId===c.id?"var(--accent)":"var(--surface)",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,fontSize:13,fontWeight:600,color:selCarId===c.id?"#ffffff":"var(--text)",fontFamily:"inherit"}},c.name)
+        e("button",{key:c.id,onClick:()=>setSelCarId(c.id),style:{padding:"8px 14px",borderRadius:12,border:selCarId===c.id?"2px solid var(--text)":"2px solid var(--border)",background:selCarId===c.id?"var(--text)":"var(--surface)",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,fontSize:13,fontWeight:600,color:selCarId===c.id?"#ffffff":"var(--text)",fontFamily:"inherit"}},c.name)
       ),
       e("button",{onClick:()=>setShowAdd(true),style:{padding:"8px 14px",borderRadius:12,border:"2px dashed #334155",background:"transparent",cursor:"pointer",color:"var(--text3)",whiteSpace:"nowrap",flexShrink:0,fontSize:12}},"追加"),
       e("button",{className:"btn-g",onClick:()=>setShowMgr(true),style:{fontSize:11,padding:"6px 10px",flexShrink:0,marginLeft:"auto"}},"車両管理")
@@ -525,7 +521,7 @@ function CarTab({ data, save }) {
 
     e("div",{style:{padding:14,maxWidth:480,margin:"0 auto"},onTouchMove:onTouchMove,onTouchEnd:onTouchEnd},
       // 車両カード
-      car&&e("div",{className:"vehicle-card",style:{background:car.color},},
+      car&&e("div",{className:"vehicle-card",style:{background:"var(--surface)"},},
         e("div",{style:{display:"flex",alignItems:"baseline",gap:10,marginBottom:(car.shakenExpiry||car.firstReg||car.carType||car.chassisNo||car.plateNo)?10:0}},
           e("div",{style:{fontSize:20,fontWeight:700,color:"var(--text)"}},car.name),
           car.plateNo&&e("div",{style:{fontSize:13,color:"var(--text2)",fontWeight:500}},car.plateNo)
@@ -535,9 +531,9 @@ function CarTab({ data, save }) {
             car.firstReg&&e("div",{key:"fr",style:{fontSize:12}},e("span",{className:"vehicle-info"},fmtDate(car.firstReg.slice(0,7)).replace("日","")+" ("+toWareki(car.firstReg)+")")),
             car.carType&&e("div",{key:"ct",style:{fontSize:12}},e("span",{className:"vehicle-info"},"型式 "+car.carType)),
             car.chassisNo&&e("div",{key:"cn",style:{fontSize:12}},e("span",{className:"vehicle-info"},"車台番号 "+car.chassisNo)),
-            car.shakenExpiry&&e("div",{key:"se",style:{fontSize:12}},e("span",{className:"vehicle-info",style:{color:isDateExpired(car.shakenExpiry)?"#ffaaaa":"rgba(255,255,255,0.6)"}},"車検 "+fmtDate(car.shakenExpiry)+"まで")),
+            car.shakenExpiry&&e("div",{key:"se",style:{fontSize:12}},e("span",{className:"vehicle-info",style:{color:isDateExpired(car.shakenExpiry)?"var(--danger)":"var(--text2)"}},"車検 "+fmtDate(car.shakenExpiry)+"まで")),
           )
-          :e("div",{style:{color:"rgba(255,255,255,0.5)",fontSize:12}},"車両管理から車検証情報を入力してください")
+          :e("div",{style:{color:"var(--text3)",fontSize:12}},"車両管理から車検証情報を入力してください")
       ),
 
       // メンテナンスヘッダー
@@ -702,7 +698,7 @@ function HomeTab({ data, save }) {
       items.length===0&&e("div",{style:{color:"var(--text3)",fontSize:13,textAlign:"center",padding:20}},"項目がありません"),
 
       ...items.map((item,idx)=>{
-        const overdue=item.lastDate?isOverdue(item.lastDate,item.intervalMonths):false;
+        const overdue=false;
         const nextDate=item.lastDate?addMonths(item.lastDate,item.intervalMonths):null;
         return e("div",{
           key:item.id,
