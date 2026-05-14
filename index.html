@@ -677,7 +677,7 @@ function HomeTab({ data, save }) {
 
   const saveEdit=()=>{
     if(!editItem)return;
-    save({...data,homeItems:(data.homeItems||[]).map(i=>i.id===editItem.id?{...i,lastDate:editItem.editDate||null,note:editItem.editNote||""}:i)});
+    save({...data,homeItems:(data.homeItems||[]).map(i=>i.id===editItem.id?{...i,lastDate:editItem.editDate||null,note:editItem.editNote||"",intervalMonths:editItem.editIntervalMonths?Number(editItem.editIntervalMonths):i.intervalMonths}:i)});
     setEditItem(null);
   };
   const addItem=()=>{
@@ -737,6 +737,18 @@ function HomeTab({ data, save }) {
       e("h3",{style:{margin:"0 0 4px",fontSize:16,fontWeight:700,color:"var(--text)"}},editItem.label),
       e("div",{style:{color:"var(--text3)",fontSize:11,marginBottom:16}},"交換情報を入力してください"),
       e(MonthPicker,{label:"交換した月",value:editItem.editDate||"",onChange:v=>setEditItem({...editItem,editDate:v})}),
+      e("div",{style:{marginBottom:10}},
+        e("label",{className:"lbl"},"交換頻度"),
+        e("select",{className:"sel",value:editItem.editIntervalMonths||editItem.intervalMonths||12,onChange:ev=>setEditItem({...editItem,editIntervalMonths:ev.target.value})},
+          e("option",{value:1},"毎月"),
+          e("option",{value:2},"2ヶ月ごと"),
+          e("option",{value:3},"3ヶ月ごと"),
+          e("option",{value:6},"6ヶ月ごと"),
+          e("option",{value:12},"12ヶ月ごと"),
+          e("option",{value:18},"18ヶ月ごと"),
+          e("option",{value:24},"2年ごと")
+        )
+      ),
       e(Inp,{label:"メモ",value:editItem.editNote||"",onChange:ev=>setEditItem({...editItem,editNote:ev.target.value})}),
       e("div",{style:{display:"flex",gap:10,marginTop:14}},e("button",{className:"btn-g",style:{flex:1},onClick:()=>setEditItem(null)},"キャンセル"),e("button",{className:"btn-p",style:{flex:2},onClick:saveEdit},"保存")),
       e("button",{className:"btn-d",style:{width:"100%",marginTop:8},onClick:()=>{deleteItem(editItem.id);setEditItem(null);}},"この項目を削除する")
