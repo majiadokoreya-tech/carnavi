@@ -444,7 +444,7 @@ function renderBottomNav(){
 }
 
 function modalShell(title,sub,body,actions=""){
-  return `<div class="modal-bg" data-action="close-modal"><section class="modal" onclick="event.stopPropagation()">
+  return `<div class="modal-bg" data-action="close-modal"><section class="modal">
     <div class="modal-grip"></div><div class="modal-head"><div><div class="modal-title">${esc(title)}</div>${sub?`<div class="modal-sub">${esc(sub)}</div>`:""}</div><button class="close-btn" data-action="close-modal">×</button></div>
     ${body}${actions}
   </section></div>`;
@@ -571,6 +571,8 @@ function readCheck(id){return !!document.getElementById(id)?.checked}
 document.addEventListener("click",ev=>{
   const el=ev.target.closest("[data-action]");if(!el)return;
   const a=el.dataset.action,car=selectedCar();
+  // モーダル背景を直接タップした時だけ閉じる。中の入力欄やボタンのクリックは通す。
+  if(a==="close-modal"&&el.classList.contains("modal-bg")&&ev.target!==el)return;
   if(a==="tab"){state.tab=el.dataset.tab;state.modal=null;render()}
   else if(a==="select-car"){state.selectedCarId=el.dataset.id;state.modal=null;render()}
   else if(a==="open-mileage"&&car){state.modal={kind:"mileage"};render()}
